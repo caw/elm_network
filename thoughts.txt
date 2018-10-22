@@ -1,0 +1,18 @@
+State - of the simulation
+Actions by users 
+    - Hx
+    - Ex
+    - Ix
+    - Interventions
+Actions from transitions (which, in sum, form the scenario) including source == destination
+    - DB Update
+    - Narrative
+    - Schedule
+Actions from schedule ('ECG has arrived')
+DB
+Time
+Are rules == transitions? 
+    - source
+    - guards
+    - actions
+    - destination (may be back to same)
