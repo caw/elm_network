@@ -1,4 +1,4 @@
-module Main exposing (Model, init, initialModel, main, subscriptions, update, view)
+module Main exposing (Model, Msg(..), getMatchingArcs, init, initialModel, main, subscriptions, update, view)
 
 import Browser
 import Debug exposing (log, toString)
@@ -33,6 +33,7 @@ type Msg
     | UpdateNumValue Key Float
     | HistoryRequest
     | ExaminationRequest
+    | FluidsRequest
     | O2Therapy FiO2
     | Trigger TriggerMsg
     | IVFluids FluidType FluidRate
@@ -96,7 +97,7 @@ initialData =
         , ( "temp", F 37.0 )
         , ( "hr", F 65.0 )
         , ( "saO2", F 120 )
-        , ( "ecg", S "Normal" )
+        , ( "ecg", S "SR 100" )
         ]
 
 
@@ -106,27 +107,27 @@ n0 =
 
 n1 =
     Node "N1"
-        (Just (Arc "n1_timeout" Nothing [ UpdateNumValue "saO2" 80, UpdateStringValue "ecg" "AF at 150" ] (\() -> n2)))
-        [ Arc "n1_exam" (Just HistoryRequest) [ UpdateNumValue "saO2" 80 ] (\() -> n2)
-        , Arc "n1_hist" (Just ExaminationRequest) [ UpdateNumValue "saO2" 80, UpdateStringValue "ecg" "AF at 150" ] (\() -> n2)
-        , Arc "n1_exam" (Just (O2Therapy 0.3)) [ UpdateNumValue "saO2" 89, UpdateStringValue "ecg" "120" ] (\() -> n3)
+        (Just (Arc "n1_timeout" Nothing [ UpdateNumValue "saO2" 75, UpdateStringValue "ecg" "AF at 150" ] (\() -> n2)))
+        [ Arc "n1_hist" (Just HistoryRequest) [ UpdateNumValue "saO2" 80, UpdateStringValue "ecg" "AF at 150" ] (\() -> n2)
+        , Arc "n1_exam" (Just ExaminationRequest) [ UpdateNumValue "saO2" 80, UpdateStringValue "ecg" "AF at 150" ] (\() -> n2)
+        , Arc "n1_o2" (Just (O2Therapy 0.3)) [ UpdateNumValue "saO2" 89, UpdateStringValue "ecg" "SR 120" ] (\() -> n3)
         ]
-        (Just 10)
+        (Just 60)
 
 
 n2 =
     Node "N2"
-        (Just (Arc "n2_timeout" Nothing [ UpdateNumValue "saO2" 76, UpdateNumValue "bp" 70, UpdateStringValue "ecg" "slowing AF" ] (\() -> n4)))
+        (Just (Arc "n2_timeout" Nothing [ UpdateNumValue "saO2" 75, UpdateNumValue "bp" 70, UpdateStringValue "ecg" "slowing AF @ 80" ] (\() -> n4)))
         []
-        (Just 60)
+        (Just 55)
 
 
 n3 =
     Node
         "N3"
-        (Just (Arc "n3_timeout" Nothing [ UpdateNumValue "saO2" 85, UpdateStringValue "ecg" "AF at 110" ] (\() -> n2)))
+        (Just (Arc "n3_timeout" Nothing [ UpdateNumValue "saO2" 85, UpdateStringValue "ecg" "AF at 120" ] (\() -> n2)))
         [ Arc "n3_fluids" (Just (IVFluids "saline" 200)) [ UpdateNumValue "bp" 95 ] (\() -> n5) ]
-        (Just 60)
+        (Just 90)
 
 
 n4 =
@@ -216,12 +217,57 @@ update msg model =
             in
             ( { model | data = newdb }, Cmd.none )
 
+        HistoryRequest ->
+            handleUserRequest model HistoryRequest
+
+        ExaminationRequest ->
+            handleUserRequest model ExaminationRequest
+
+        FluidsRequest ->
+            handleUserRequest model FluidsRequest
+
+        O2Therapy fio2 ->
+            handleUserRequest model (O2Therapy fio2)
+
         _ ->
             let
                 _ =
                     log "message not matched" msg
             in
             ( model, Cmd.none )
+
+
+checkArcMatch arc request =
+    let
+        (Arc _ r _ _) =
+            arc
+    in
+    r == Just request
+
+
+getMatchingArcs arcs request =
+    let
+        matches =
+            List.filter (\arc -> checkArcMatch arc request) arcs
+
+        _ =
+            log "matches with request: " request
+
+        _ =
+            log "arcs: " matches
+    in
+    matches
+
+
+handleUserRequest model request =
+    let
+        arcs =
+            model.currentNode.arcs
+
+        _ =
+            log "arcs" arcs
+    in
+    ( model, Cmd.none )
 
 
 updateSimTime : Model -> Model
@@ -240,12 +286,6 @@ maybeTimeoutNode model =
         cn =
             model.currentNode
 
-        _ =
-            log "sim time: " model.elapsedSimTime
-
-        _ =
-            log "node time: " model.timeInCurrentNode
-
         newModel =
             case cn.timeout of
                 Just t ->
@@ -259,6 +299,10 @@ maybeTimeoutNode model =
                     model
     in
     newModel
+
+
+
+-- maybe we let this take an arc as a parameter, so we can use for timeout and non-timeout arcs?
 
 
 timeoutTransition : Model -> Model
@@ -289,12 +333,32 @@ timeoutTransition model =
 view : Model -> Html Msg
 view model =
     div []
-        [ text "elapsedSimTime:  "
-        , text (String.fromInt model.elapsedSimTime ++ "   ")
-        , text "timeInCurrentNode: "
-        , text (String.fromInt model.timeInCurrentNode ++ "   ")
-        , text model.currentNode.name
-        , div [] [ text (toString model.data) ]
+        [ simpleView "Elapsed Sim Time" model.elapsedSimTime
+        , simpleView "Time in Current Node" model.timeInCurrentNode
+        , simpleView "Current Node" model.currentNode.name
+        , hr [] []
+        , text (toString model.data)
+        , hr [] []
+        , div
+            []
+            [ controlView model
+            ]
+        ]
+
+
+simpleView label value =
+    div []
+        [ text (label ++ ":   ")
+        , text (toString value)
+        ]
+
+
+controlView model =
+    div []
+        [ button [ onClick HistoryRequest ] [ text "Request History" ]
+        , button [ onClick ExaminationRequest ] [ text "Perform Examination" ]
+        , button [ onClick FluidsRequest ] [ text "Give IV fluids" ]
+        , button [ onClick (O2Therapy 0.5) ] [ text "O2 Therapy" ]
         ]
 
 
