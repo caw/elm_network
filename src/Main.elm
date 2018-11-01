@@ -31,7 +31,11 @@ type Msg
     = Tick Time.Posix
     | UpdateStringValue Key String
     | UpdateNumValue Key Float
+    | HistoryRequest
+    | ExaminationRequest
+    | O2Therapy FiO2
     | Trigger TriggerMsg
+    | IVFluids FluidType FluidRate
     | ProcessMessages ArcMessages
 
 
@@ -43,6 +47,18 @@ type TriggerMsg
 type DbValue
     = F Float
     | S String
+
+
+type alias FluidType =
+    String
+
+
+type alias FluidRate =
+    Int
+
+
+type alias FiO2 =
+    Float
 
 
 type alias Key =
@@ -62,7 +78,7 @@ type alias NodeName =
 
 
 type Arc
-    = Arc String TriggerMsg (List Msg) (() -> Node)
+    = Arc String (Maybe Msg) (List Msg) (() -> Node)
 
 
 type alias Node =
@@ -76,38 +92,70 @@ type alias Node =
 initialData : Dict.Dict String DbValue
 initialData =
     Dict.fromList
-        [ ( "bp", F 100.0 )
+        [ ( "bp", F 85.0 )
         , ( "temp", F 37.0 )
         , ( "hr", F 65.0 )
+        , ( "saO2", F 120 )
         , ( "ecg", S "Normal" )
         ]
 
 
+n0 =
+    Node "START" (Just (Arc "n0_timeout" Nothing [] (\() -> n1))) [] (Just 0)
+
+
 n1 =
-    Node "n1" (Just a3) [ a1, a2 ] (Just 5)
+    Node "N1"
+        (Just (Arc "n1_timeout" Nothing [ UpdateNumValue "saO2" 80, UpdateStringValue "ecg" "AF at 150" ] (\() -> n2)))
+        [ Arc "n1_exam" (Just HistoryRequest) [ UpdateNumValue "saO2" 80 ] (\() -> n2)
+        , Arc "n1_hist" (Just ExaminationRequest) [ UpdateNumValue "saO2" 80, UpdateStringValue "ecg" "AF at 150" ] (\() -> n2)
+        , Arc "n1_exam" (Just (O2Therapy 0.3)) [ UpdateNumValue "saO2" 89, UpdateStringValue "ecg" "120" ] (\() -> n3)
+        ]
+        (Just 10)
 
 
 n2 =
-    Node "n2" Nothing [ a2 ] (Just 1)
+    Node "N2"
+        (Just (Arc "n2_timeout" Nothing [ UpdateNumValue "saO2" 76, UpdateNumValue "bp" 70, UpdateStringValue "ecg" "slowing AF" ] (\() -> n4)))
+        []
+        (Just 60)
+
+
+n3 =
+    Node
+        "N3"
+        (Just (Arc "n3_timeout" Nothing [ UpdateNumValue "saO2" 85, UpdateStringValue "ecg" "AF at 110" ] (\() -> n2)))
+        [ Arc "n3_fluids" (Just (IVFluids "saline" 200)) [ UpdateNumValue "bp" 95 ] (\() -> n5) ]
+        (Just 60)
+
+
+n4 =
+    Node "N4"
+        Nothing
+        []
+        Nothing
+
+
+n5 =
+    Node "N5"
+        Nothing
+        []
+        Nothing
 
 
 a1 : Arc
 a1 =
-    Arc "a1" History [ UpdateNumValue "hr" 333, UpdateStringValue "ecg" "WFT!!!!" ] (\() -> n2)
+    Arc "a1" (Just HistoryRequest) [ UpdateNumValue "hr" 333, UpdateStringValue "ecg" "WFT!!!!" ] (\() -> n2)
 
 
 a2 : Arc
 a2 =
-    Arc "a2" Examination [ UpdateNumValue "bp" 101, UpdateNumValue "temp" 37.0000001 ] (\() -> n1)
+    Arc "a2" (Just ExaminationRequest) [ UpdateNumValue "bp" 101, UpdateNumValue "temp" 37.0000001 ] (\() -> n1)
 
 
 a3 : Arc
 a3 =
-    Arc "a3" History [ UpdateNumValue "bp" 1000000, UpdateStringValue "ecg" "NFI" ] (\() -> n2)
-
-
-
--- Arc "a3" History [ UpdateNumValue "bp" 1000000 ] (\() -> n2)
+    Arc "a3" Nothing [ UpdateNumValue "bp" 1000000, UpdateStringValue "ecg" "NFI" ] (\() -> n2)
 
 
 type alias Model =
@@ -137,17 +185,7 @@ init _ =
 
 
 updateData model key value =
-    let
-        _ =
-            log key
-    in
     Dict.update key (\_ -> Just value) model.data
-
-
-
--- get key db
--- is already in Dict
--- UPDATE
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -161,10 +199,6 @@ update msg model =
                 |> (\newModel -> ( newModel, Cmd.none ))
 
         ProcessMessages arcMessages ->
-            let
-                _ =
-                    log "messages" (toString arcMessages)
-            in
             ( model, Cmd.none )
                 |> sequence update arcMessages
 
@@ -206,18 +240,17 @@ maybeTimeoutNode model =
         cn =
             model.currentNode
 
+        _ =
+            log "sim time: " model.elapsedSimTime
+
+        _ =
+            log "node time: " model.timeInCurrentNode
+
         newModel =
             case cn.timeout of
                 Just t ->
                     if model.timeInCurrentNode >= t then
-                        let
-                            m =
-                                timeoutNode model
-
-                            _ =
-                                log "m.db:  " m.data
-                        in
-                        m
+                        timeoutTransition model
 
                     else
                         model
@@ -228,8 +261,8 @@ maybeTimeoutNode model =
     newModel
 
 
-timeoutNode : Model -> Model
-timeoutNode model =
+timeoutTransition : Model -> Model
+timeoutTransition model =
     let
         arc =
             model.currentNode.timeoutArc
@@ -240,33 +273,16 @@ timeoutNode model =
                 ( newModel, newCmds ) =
                     update (ProcessMessages arcMessages) model
             in
-            { newModel | currentNode = destinationThunk () }
+            { newModel
+                | currentNode = destinationThunk ()
+                , timeInCurrentNode = 0
+            }
 
         Nothing ->
             model
 
 
 
-{- ( new_current_node, new_model, new_commands ) =
-           case arc of
-               Just (Arc name triggerMessages arcMessages destinationThunk) ->
-                   let
-                       ( newMdl, newCmds ) =
-                           update (ProcessMessages arcMessages) model
-                   in
-                   ( destinationThunk (), newMdl, newCmds )
-
-               Nothing ->
-                   -- **************** ERROR ******************** no timeoutArc - need to make this imposible state impossible at compile time
-                   let
-                       _ =
-                           log "NOTHING !!!!!"
-                   in
-                   ( model.currentNode, model, Cmd.none )
-   in
-   { new_model | currentNode = new_current_node }
-
--}
 -- VIEW
 
 
