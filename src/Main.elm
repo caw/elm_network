@@ -37,6 +37,8 @@ type Msg
     | O2Therapy FiO2
     | Trigger TriggerMsg
     | ProcessMessages ArcMessages
+    | Pause
+    | Run
 
 
 type TriggerMsg
@@ -87,6 +89,12 @@ type alias Node =
     , arcs : List Arc
     , timeout : Maybe Int
     }
+
+
+type RunningState
+    = NotStarted
+    | Running
+    | Paused
 
 
 initialData : Dict.Dict String DbValue
@@ -144,7 +152,8 @@ n5 =
 
 
 type alias Model =
-    { elapsedSimTime : Int
+    { runningState : RunningState
+    , elapsedSimTime : Int
     , timeInCurrentNode : Int
     , speedUp : Float
     , currentNode : Node
@@ -155,7 +164,8 @@ type alias Model =
 
 initialModel : Model
 initialModel =
-    { elapsedSimTime = 0
+    { runningState = NotStarted
+    , elapsedSimTime = 0
     , timeInCurrentNode = 0
     , speedUp = 1
     , currentNode = n1
@@ -177,11 +187,21 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Tick _ ->
-            model
-                |> updateSimTime
-                |> updateNodeTime
-                |> maybeTimeoutNode
-                |> (\newModel -> ( newModel, Cmd.none ))
+            if model.runningState == Running then
+                model
+                    |> updateSimTime
+                    |> updateNodeTime
+                    |> maybeTimeoutNode
+                    |> (\newModel -> ( newModel, Cmd.none ))
+
+            else
+                ( model, Cmd.none )
+
+        Pause ->
+            ( { model | runningState = Paused }, Cmd.none )
+
+        Run ->
+            ( { model | runningState = Running }, Cmd.none )
 
         ProcessMessages arcMessages ->
             ( model, Cmd.none )
@@ -403,14 +423,34 @@ simpleView label value =
 
 controlView model =
     div []
-        [ button [ onClick HistoryRequest ] [ text "Request History" ]
-        , button [ onClick ExaminationRequest ] [ text "Perform Examination" ]
-        , button [ onClick (O2Therapy 0.3) ] [ text "O2 Therapy" ]
+        [ button [ class "pure-button", onClick HistoryRequest ] [ text "Request History" ]
+        , button [ class "pure-button", onClick ExaminationRequest ] [ text "Perform Examination" ]
+        , button [ class "pure-button", onClick (O2Therapy 0.3) ] [ text "O2 Therapy" ]
         , hr [] []
-        , button [ onClick (IVFluids 100 "saline") ] [ text "Give IV fluids - 100ml/hr NS" ]
-        , button [ onClick (IVFluids 500 "saline") ] [ text "Give IV fluids - 500ml/hr NS" ]
-        , button [ onClick (IVFluids 100 "5% Dx") ] [ text "Give IV fluids - 100ml/hr 5% Dx" ]
+        , fluidsView model
+        , hr [] []
+        , runningStateView model
         ]
+
+
+fluidsView model =
+    if model.currentNode.name == "N5" then
+        div [] [ text "No fluids left!" ]
+
+    else
+        div []
+            [ button [ class "pure-button", onClick (IVFluids 100 "saline") ] [ text "IV fluids - 100ml/hr NS" ]
+            , button [ class "pure-button", onClick (IVFluids 500 "saline") ] [ text "IV fluids - 500ml/hr NS" ]
+            , button [ class "pure-button", onClick (IVFluids 100 "5% Dx") ] [ text "IV fluids - 100ml/hr 5% Dx" ]
+            ]
+
+
+runningStateView model =
+    if model.runningState == Running then
+        div [] [ button [ class "pure-button", onClick Pause ] [ text "Pause" ] ]
+
+    else
+        div [] [ button [ class "pure-button", onClick Run ] [ text "Run" ] ]
 
 
 
