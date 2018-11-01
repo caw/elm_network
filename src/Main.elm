@@ -1,4 +1,4 @@
-module Main exposing (Model, Msg(..), getMatchingArcs, init, initialModel, main, subscriptions, update, view)
+module Main exposing (Model, Msg(..), checkArcMatch, getMatchingArcs, handleUserRequest, init, initialModel, main, n1, n2, n3, n4, n5, subscriptions, update, view)
 
 import Browser
 import Debug exposing (log, toString)
@@ -33,10 +33,9 @@ type Msg
     | UpdateNumValue Key Float
     | HistoryRequest
     | ExaminationRequest
-    | FluidsRequest
+    | IVFluids FluidRate FluidType
     | O2Therapy FiO2
     | Trigger TriggerMsg
-    | IVFluids FluidType FluidRate
     | ProcessMessages ArcMessages
 
 
@@ -96,7 +95,7 @@ initialData =
         [ ( "bp", F 85.0 )
         , ( "temp", F 37.0 )
         , ( "hr", F 65.0 )
-        , ( "saO2", F 120 )
+        , ( "saO2", F 85 )
         , ( "ecg", S "SR 100" )
         ]
 
@@ -118,7 +117,7 @@ n1 =
 n2 =
     Node "N2"
         (Just (Arc "n2_timeout" Nothing [ UpdateNumValue "saO2" 75, UpdateNumValue "bp" 70, UpdateStringValue "ecg" "slowing AF @ 80" ] (\() -> n4)))
-        []
+        [ Arc "n1_o2" (Just (O2Therapy 0.3)) [ UpdateNumValue "saO2" 89, UpdateStringValue "ecg" "SR 120" ] (\() -> n3) ]
         (Just 55)
 
 
@@ -126,7 +125,7 @@ n3 =
     Node
         "N3"
         (Just (Arc "n3_timeout" Nothing [ UpdateNumValue "saO2" 85, UpdateStringValue "ecg" "AF at 120" ] (\() -> n2)))
-        [ Arc "n3_fluids" (Just (IVFluids "saline" 200)) [ UpdateNumValue "bp" 95 ] (\() -> n5) ]
+        [ Arc "n3_fluids" (Just (IVFluids 100 "saline")) [ UpdateNumValue "bp" 95 ] (\() -> n5) ]
         (Just 90)
 
 
@@ -142,21 +141,6 @@ n5 =
         Nothing
         []
         Nothing
-
-
-a1 : Arc
-a1 =
-    Arc "a1" (Just HistoryRequest) [ UpdateNumValue "hr" 333, UpdateStringValue "ecg" "WFT!!!!" ] (\() -> n2)
-
-
-a2 : Arc
-a2 =
-    Arc "a2" (Just ExaminationRequest) [ UpdateNumValue "bp" 101, UpdateNumValue "temp" 37.0000001 ] (\() -> n1)
-
-
-a3 : Arc
-a3 =
-    Arc "a3" Nothing [ UpdateNumValue "bp" 1000000, UpdateStringValue "ecg" "NFI" ] (\() -> n2)
 
 
 type alias Model =
@@ -218,15 +202,55 @@ update msg model =
             ( { model | data = newdb }, Cmd.none )
 
         HistoryRequest ->
+            let
+                _ =
+                    log "History Request" ""
+
+                _ =
+                    log "Elapsed Time:  " model.elapsedSimTime
+
+                _ =
+                    log "Tim in Node:   " model.timeInCurrentNode
+            in
             handleUserRequest model HistoryRequest
 
         ExaminationRequest ->
+            let
+                _ =
+                    log "Examination Request" ""
+
+                _ =
+                    log "Elapsed Time:  " model.elapsedSimTime
+
+                _ =
+                    log "Tim in Node:   " model.timeInCurrentNode
+            in
             handleUserRequest model ExaminationRequest
 
-        FluidsRequest ->
-            handleUserRequest model FluidsRequest
+        IVFluids rate fluidType ->
+            let
+                _ =
+                    log "IV Fluids rate/type:  " (String.fromInt rate ++ "/" ++ fluidType)
+
+                _ =
+                    log "Elapsed Time:         " model.elapsedSimTime
+
+                _ =
+                    log "Tim in Node:          " model.timeInCurrentNode
+            in
+            handleUserRequest model (IVFluids rate fluidType)
 
         O2Therapy fio2 ->
+            let
+                _ =
+                    log "O2 Therapy:   " fio2
+
+                _ =
+                    log "Elapsed Time: " model.elapsedSimTime
+
+                _ =
+                    log "Tim in Node:  " model.timeInCurrentNode
+            in
             handleUserRequest model (O2Therapy fio2)
 
         _ ->
@@ -246,28 +270,47 @@ checkArcMatch arc request =
 
 
 getMatchingArcs arcs request =
-    let
-        matches =
-            List.filter (\arc -> checkArcMatch arc request) arcs
-
-        _ =
-            log "matches with request: " request
-
-        _ =
-            log "arcs: " matches
-    in
-    matches
+    List.filter (\arc -> checkArcMatch arc request) arcs
 
 
 handleUserRequest model request =
     let
         arcs =
-            model.currentNode.arcs
+            getMatchingArcs model.currentNode.arcs request
 
-        _ =
-            log "arcs" arcs
+        newModel =
+            case arcs of
+                [] ->
+                    model
+
+                [ arc ] ->
+                    eventTransition model arc
+
+                arc :: rest ->
+                    -- AGAIN NEVER HAVE > 1 ARC AS A MATCH!!
+                    let
+                        _ =
+                            log "multiple matching arcs" (arc :: rest)
+                    in
+                    model
     in
-    ( model, Cmd.none )
+    ( newModel, Cmd.none )
+
+
+eventTransition : Model -> Arc -> Model
+eventTransition model arc =
+    -- model
+    let
+        (Arc name _ arcMessages destinationThunk) =
+            arc
+
+        ( newModel, newCommands ) =
+            update (ProcessMessages arcMessages) model
+    in
+    { newModel
+        | currentNode = destinationThunk ()
+        , timeInCurrentNode = 0
+    }
 
 
 updateSimTime : Model -> Model
@@ -337,13 +380,18 @@ view model =
         , simpleView "Time in Current Node" model.timeInCurrentNode
         , simpleView "Current Node" model.currentNode.name
         , hr [] []
-        , text (toString model.data)
+        , dataView model
         , hr [] []
         , div
             []
             [ controlView model
             ]
         ]
+
+
+dataView : Model -> Html Msg
+dataView model =
+    text (toString (Dict.toList model.data))
 
 
 simpleView label value =
@@ -357,8 +405,11 @@ controlView model =
     div []
         [ button [ onClick HistoryRequest ] [ text "Request History" ]
         , button [ onClick ExaminationRequest ] [ text "Perform Examination" ]
-        , button [ onClick FluidsRequest ] [ text "Give IV fluids" ]
-        , button [ onClick (O2Therapy 0.5) ] [ text "O2 Therapy" ]
+        , button [ onClick (O2Therapy 0.3) ] [ text "O2 Therapy" ]
+        , hr [] []
+        , button [ onClick (IVFluids 100 "saline") ] [ text "Give IV fluids - 100ml/hr NS" ]
+        , button [ onClick (IVFluids 500 "saline") ] [ text "Give IV fluids - 500ml/hr NS" ]
+        , button [ onClick (IVFluids 100 "5% Dx") ] [ text "Give IV fluids - 100ml/hr 5% Dx" ]
         ]
 
 
