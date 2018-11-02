@@ -1,4 +1,4 @@
-module Main exposing (Model, Msg(..), checkArcMatch, getMatchingArcs, handleUserRequest, init, initialModel, main, n1, n2, n3, n4, n5, subscriptions, update, view)
+port module Main exposing (Model, Msg(..), checkArcMatch, getMatchingArcs, handleUserRequest, init, initialModel, main, n1, n2, n3, n4, n5, subscriptions, update, view)
 
 import Browser
 import Debug exposing (log, toString)
@@ -6,8 +6,16 @@ import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
+import Json.Encode as E
 import Time
 import Update.Extra exposing (sequence)
+
+
+
+--port play : E.Value -> Cmd msg
+
+
+port sounds : E.Value -> Cmd msg
 
 
 
@@ -29,7 +37,7 @@ main =
 
 type Msg
     = Tick Time.Posix
-    | Tock Time.Posix
+    | OximetryBeep Time.Posix
     | UpdateStringValue Key String
     | UpdateNumValue Key Float
     | HistoryRequest
@@ -103,7 +111,7 @@ initialData =
     Dict.fromList
         [ ( "bp", F 85.0 )
         , ( "temp", F 37.0 )
-        , ( "hr", F 65.0 )
+        , ( "hr", F 100.0 )
         , ( "saO2", F 85 )
         , ( "ecg", S "SR 100" )
         ]
@@ -115,9 +123,9 @@ n0 =
 
 n1 =
     Node "N1"
-        (Just (Arc "n1_timeout" Nothing [ UpdateNumValue "saO2" 75, UpdateStringValue "ecg" "AF at 150" ] (\() -> n2)))
-        [ Arc "n1_hist" (Just HistoryRequest) [ UpdateNumValue "saO2" 80, UpdateStringValue "ecg" "AF at 150" ] (\() -> n2)
-        , Arc "n1_exam" (Just ExaminationRequest) [ UpdateNumValue "saO2" 80, UpdateStringValue "ecg" "AF at 150" ] (\() -> n2)
+        (Just (Arc "n1_timeout" Nothing [ UpdateNumValue "saO2" 75, UpdateStringValue "ecg" "AF at 150", UpdateNumValue "hr" 150 ] (\() -> n2)))
+        [ Arc "n1_hist" (Just HistoryRequest) [ UpdateNumValue "saO2" 80, UpdateStringValue "ecg" "AF at 150", UpdateNumValue "hr" 150 ] (\() -> n2)
+        , Arc "n1_exam" (Just ExaminationRequest) [ UpdateNumValue "saO2" 80, UpdateStringValue "ecg" "AF at 150", UpdateNumValue "hr" 150 ] (\() -> n2)
         , Arc "n1_o2" (Just (O2Therapy 0.3)) [ UpdateNumValue "saO2" 89, UpdateStringValue "ecg" "SR 120" ] (\() -> n3)
         ]
         (Just 60)
@@ -125,16 +133,16 @@ n1 =
 
 n2 =
     Node "N2"
-        (Just (Arc "n2_timeout" Nothing [ UpdateNumValue "saO2" 75, UpdateNumValue "bp" 70, UpdateStringValue "ecg" "slowing AF @ 80" ] (\() -> n4)))
-        [ Arc "n1_o2" (Just (O2Therapy 0.3)) [ UpdateNumValue "saO2" 89, UpdateStringValue "ecg" "SR 120" ] (\() -> n3) ]
+        (Just (Arc "n2_timeout" Nothing [ UpdateNumValue "saO2" 75, UpdateNumValue "bp" 70, UpdateStringValue "ecg" "slowing AF @ 80", UpdateNumValue "hr" 80 ] (\() -> n4)))
+        [ Arc "n1_o2" (Just (O2Therapy 0.3)) [ UpdateNumValue "saO2" 89, UpdateStringValue "ecg" "SR 120", UpdateNumValue "hr" 120 ] (\() -> n3) ]
         (Just 55)
 
 
 n3 =
     Node
         "N3"
-        (Just (Arc "n3_timeout" Nothing [ UpdateNumValue "saO2" 85, UpdateStringValue "ecg" "AF at 120" ] (\() -> n2)))
-        [ Arc "n3_fluids" (Just (IVFluids 100 "saline")) [ UpdateNumValue "bp" 95 ] (\() -> n5) ]
+        (Just (Arc "n3_timeout" Nothing [ UpdateNumValue "saO2" 85, UpdateStringValue "ecg" "AF at 120", UpdateNumValue "hr" 120 ] (\() -> n2)))
+        [ Arc "n3_fluids" (Just (IVFluids 100 "saline")) [ UpdateNumValue "bp" 95, UpdateStringValue "ecg" "SR at 90", UpdateNumValue "hr" 90 ] (\() -> n5) ]
         (Just 90)
 
 
@@ -187,12 +195,12 @@ updateData model key value =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        Tock _ ->
-            let
-                _ =
-                    log "." "."
-            in
-            ( model, Cmd.none )
+        OximetryBeep _ ->
+            if model.runningState == Running then
+                ( model, sounds (E.string "beep") )
+
+            else
+                ( model, Cmd.none )
 
         Tick _ ->
             if model.runningState == Running then
@@ -410,10 +418,23 @@ view model =
         , hr [] []
         , dataView model
         , hr [] []
-        , div
-            []
-            [ controlView model
+        , div [] [ controlView model ]
+        , audioView model
+        ]
+
+
+audioView model =
+    div [ id "audio" ]
+        [ audio
+            [ id "pulse-beep"
+
+            -- src can be a local file too.
+            , src "beep2.mp3"
+
+            --, src "https://soundbible.com/mp3/Tyrannosaurus%20Rex%20Roar-SoundBible.com-807702404.mp3"
+            , controls False
             ]
+            []
         ]
 
 
@@ -467,9 +488,24 @@ runningStateView model =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
+    let
+        maybehr =
+            Dict.get "hr" model.data
+
+        hrPeriod =
+            case maybehr of
+                Just (F rate) ->
+                    60 / rate
+
+                Just (S value) ->
+                    1
+
+                Nothing ->
+                    1
+    in
     Sub.batch
         [ Time.every (1000 / model.speedUp) Tick
 
         -- This is how we do the pulse oximetry beeping at the HR
-        -- , Time.every 500 Tock
+        , Time.every (1000 * hrPeriod) OximetryBeep
         ]

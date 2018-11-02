@@ -6,6 +6,10 @@ repl-temp-*
 #vs code stuff
 .vscode/
 
+# sounds stuff
+sounds_data/
+sounds.aup
+
 main.js
 
 network1.jpg
