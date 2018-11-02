@@ -29,6 +29,7 @@ main =
 
 type Msg
     = Tick Time.Posix
+    | Tock Time.Posix
     | UpdateStringValue Key String
     | UpdateNumValue Key Float
     | HistoryRequest
@@ -186,6 +187,13 @@ updateData model key value =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        Tock _ ->
+            let
+                _ =
+                    log "." "."
+            in
+            ( model, Cmd.none )
+
         Tick _ ->
             if model.runningState == Running then
                 model
@@ -281,6 +289,16 @@ update msg model =
             ( model, Cmd.none )
 
 
+updateSimTime : Model -> Model
+updateSimTime model =
+    { model | elapsedSimTime = model.elapsedSimTime + 1 }
+
+
+updateNodeTime : Model -> Model
+updateNodeTime model =
+    { model | timeInCurrentNode = model.timeInCurrentNode + 1 }
+
+
 checkArcMatch arc request =
     let
         (Arc _ r _ _) =
@@ -331,16 +349,6 @@ eventTransition model arc =
         | currentNode = destinationThunk ()
         , timeInCurrentNode = 0
     }
-
-
-updateSimTime : Model -> Model
-updateSimTime model =
-    { model | elapsedSimTime = model.elapsedSimTime + 1 }
-
-
-updateNodeTime : Model -> Model
-updateNodeTime model =
-    { model | timeInCurrentNode = model.timeInCurrentNode + 1 }
 
 
 maybeTimeoutNode : Model -> Model
@@ -459,4 +467,9 @@ runningStateView model =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    Time.every (1000 / model.speedUp) Tick
+    Sub.batch
+        [ Time.every (1000 / model.speedUp) Tick
+
+        -- This is how we do the pulse oximetry beeping at the HR
+        -- , Time.every 500 Tock
+        ]

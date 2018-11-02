@@ -16,3 +16,4 @@ Are rules == transitions?
     - guards
     - actions
     - destination (may be back to same)
+Can I batch 2 timers? (one for sim update, one for pulse oximetry)
