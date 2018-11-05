@@ -459,7 +459,7 @@ timeoutTransition model =
 view : Model -> Html Msg
 view model =
     div []
-        [ table [ class "pure-table" ] <|
+        [ table [ class "pure-table" ]
             [ thead []
                 [ tr []
                     [ th [] [ text "Parameter" ]
