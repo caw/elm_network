@@ -1,4 +1,4 @@
-port module Main exposing (Model, Msg(..), checkArcMatch, getMatchingArcs, handleTrigger, init, initialModel, main, n1, n2, n3, n4, n5, subscriptions, update, view)
+port module Main exposing (Model, checkArcMatch, getMatchingArcs, handleTrigger, init, initialModel, main, subscriptions, update, view)
 
 import Browser
 import Debug exposing (log, toString)
@@ -7,7 +7,9 @@ import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Json.Encode as E
+import Network exposing (..)
 import Time
+import Types exposing (..)
 import Update.Extra exposing (sequence)
 
 
@@ -35,79 +37,6 @@ main =
 -- MODEL
 
 
-type Msg
-    = Tick Time.Posix
-    | OximetryBeep Time.Posix
-    | UpdateStringValue Key String
-    | UpdateNumValue Key Float
-    | DeltaNumValueByAmount Key Float
-    | DeltaNumValueByPercent Key Float
-    | HistoryRequest
-    | ExaminationRequest
-    | IVFluids FluidRate FluidType
-    | O2Therapy FiO2
-    | Trigger TriggerMsg
-    | ProcessMessages ArcMessages
-    | Pause
-    | Run
-
-
-type TriggerMsg
-    = History
-    | Examination
-
-
-type DbValue
-    = F Float
-    | S String
-
-
-type alias FluidType =
-    String
-
-
-type alias FluidRate =
-    Int
-
-
-type alias FiO2 =
-    Float
-
-
-type alias Key =
-    String
-
-
-type alias ArcName =
-    String
-
-
-type alias ArcMessages =
-    List Msg
-
-
-type alias NodeName =
-    String
-
-
-type Arc
-    = Arc String (Maybe Msg) (List Msg) (() -> Node)
-
-
-type alias Node =
-    { name : NodeName
-    , timeoutArc : Maybe Arc
-    , arcs : List Arc
-    , timeout : Maybe Int
-    }
-
-
-type RunningState
-    = NotStarted
-    | Running
-    | Paused
-
-
 initialData : Dict.Dict String DbValue
 initialData =
     Dict.fromList
@@ -133,33 +62,35 @@ n1 =
         (Just 60)
 
 
-n2 =
-    Node "N2"
-        (Just (Arc "n2_timeout" Nothing [ UpdateNumValue "saO2" 75, UpdateNumValue "bp" 70, UpdateStringValue "ecg" "slowing AF @ 80", UpdateNumValue "hr" 80 ] (\() -> n4)))
-        [ Arc "n1_o2" (Just (O2Therapy 0.3)) [ UpdateNumValue "saO2" 89, UpdateStringValue "ecg" "SR 120", UpdateNumValue "hr" 120 ] (\() -> n3) ]
-        (Just 55)
+
+{- n2 =
+       Node "N2"
+           (Just (Arc "n2_timeout" Nothing [ UpdateNumValue "saO2" 75, UpdateNumValue "bp" 70, UpdateStringValue "ecg" "slowing AF @ 80", UpdateNumValue "hr" 80 ] (\() -> n4)))
+           [ Arc "n1_o2" (Just (O2Therapy 0.3)) [ UpdateNumValue "saO2" 89, UpdateStringValue "ecg" "SR 120", UpdateNumValue "hr" 120 ] (\() -> n3) ]
+           (Just 55)
 
 
-n3 =
-    Node
-        "N3"
-        (Just (Arc "n3_timeout" Nothing [ UpdateNumValue "saO2" 85, UpdateStringValue "ecg" "AF at 120", UpdateNumValue "hr" 120 ] (\() -> n2)))
-        [ Arc "n3_fluids" (Just (IVFluids 100 "saline")) [ UpdateNumValue "bp" 95, UpdateStringValue "ecg" "SR at 90", UpdateNumValue "hr" 90 ] (\() -> n5) ]
-        (Just 90)
+   n3 =
+       Node
+           "N3"
+           (Just (Arc "n3_timeout" Nothing [ UpdateNumValue "saO2" 85, UpdateStringValue "ecg" "AF at 120", UpdateNumValue "hr" 120 ] (\() -> n2)))
+           [ Arc "n3_fluids" (Just (IVFluids 100 "saline")) [ UpdateNumValue "bp" 95, UpdateStringValue "ecg" "SR at 90", UpdateNumValue "hr" 90 ] (\() -> n5) ]
+           (Just 90)
 
 
-n4 =
-    Node "N4"
-        Nothing
-        []
-        Nothing
+   n4 =
+       Node "N4"
+           Nothing
+           []
+           Nothing
 
 
-n5 =
-    Node "N5"
-        Nothing
-        []
-        Nothing
+   n5 =
+       Node "N5"
+           Nothing
+           []
+           Nothing
+-}
 
 
 type alias Model =
