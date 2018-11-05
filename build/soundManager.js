@@ -1,6 +1,6 @@
 ;(function SoundManager() {
 const sounds = {
-beep: new Howl({ src: ["beep.mp3"]}),
+beep: new Howl({ src: ["beep2.mp3"]}),
 };
 
 window.SoundManager = function (name) {
