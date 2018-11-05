@@ -484,7 +484,7 @@ view model =
         , hr [] []
         , div [] [ controlView model ]
 
-        --, audioView model
+        -- , audioView model
         ]
 
 
@@ -501,7 +501,7 @@ audioView model =
             [ id "pulse-beep"
 
             -- src can be a local file too.
-            , src "lower_beep2.mp3"
+            , src "beep.mp3"
 
             --, src "https://soundbible.com/mp3/Tyrannosaurus%20Rex%20Roar-SoundBible.com-807702404.mp3"
             , controls False
