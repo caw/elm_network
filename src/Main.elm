@@ -1,4 +1,4 @@
-port module Main exposing (Model, Msg(..), checkArcMatch, getMatchingArcs, handleUserRequest, init, initialModel, main, n1, n2, n3, n4, n5, subscriptions, update, view)
+port module Main exposing (Model, Msg(..), checkArcMatch, getMatchingArcs, handleTrigger, init, initialModel, main, n1, n2, n3, n4, n5, subscriptions, update, view)
 
 import Browser
 import Debug exposing (log, toString)
@@ -40,6 +40,8 @@ type Msg
     | OximetryBeep Time.Posix
     | UpdateStringValue Key String
     | UpdateNumValue Key Float
+    | DeltaNumValueByAmount Key Float
+    | DeltaNumValueByPercent Key Float
     | HistoryRequest
     | ExaminationRequest
     | IVFluids FluidRate FluidType
@@ -237,6 +239,44 @@ update msg model =
             in
             ( { model | data = newdb }, Cmd.none )
 
+        DeltaNumValueByAmount key delta ->
+            let
+                oldValue =
+                    Dict.get key model.data
+            in
+            case oldValue of
+                Just (F val) ->
+                    let
+                        newdb =
+                            updateData model key (F (val + delta))
+                    in
+                    ( { model | data = newdb }, Cmd.none )
+
+                Just (S val) ->
+                    ( model, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        DeltaNumValueByPercent key percentDelta ->
+            let
+                oldValue =
+                    Dict.get key model.data
+            in
+            case oldValue of
+                Just (F val) ->
+                    let
+                        newdb =
+                            updateData model key (F (val + (percentDelta * val)))
+                    in
+                    ( { model | data = newdb }, Cmd.none )
+
+                Just (S val) ->
+                    ( model, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
         HistoryRequest ->
             let
                 _ =
@@ -248,7 +288,7 @@ update msg model =
                 _ =
                     log "Tim in Node:   " model.timeInCurrentNode
             in
-            handleUserRequest model HistoryRequest
+            handleTrigger model HistoryRequest
 
         ExaminationRequest ->
             let
@@ -261,7 +301,7 @@ update msg model =
                 _ =
                     log "Tim in Node:   " model.timeInCurrentNode
             in
-            handleUserRequest model ExaminationRequest
+            handleTrigger model ExaminationRequest
 
         IVFluids rate fluidType ->
             let
@@ -274,7 +314,7 @@ update msg model =
                 _ =
                     log "Tim in Node:          " model.timeInCurrentNode
             in
-            handleUserRequest model (IVFluids rate fluidType)
+            handleTrigger model (IVFluids rate fluidType)
 
         O2Therapy fio2 ->
             let
@@ -287,7 +327,7 @@ update msg model =
                 _ =
                     log "Tim in Node:  " model.timeInCurrentNode
             in
-            handleUserRequest model (O2Therapy fio2)
+            handleTrigger model (O2Therapy fio2)
 
         _ ->
             let
@@ -319,7 +359,7 @@ getMatchingArcs arcs request =
     List.filter (\arc -> checkArcMatch arc request) arcs
 
 
-handleUserRequest model request =
+handleTrigger model request =
     let
         arcs =
             getMatchingArcs model.currentNode.arcs request
@@ -395,10 +435,17 @@ timeoutTransition model =
             let
                 ( newModel, newCmds ) =
                     update (ProcessMessages arcMessages) model
+
+                newCurrentTimeInNode =
+                    if destinationThunk () == model.currentNode then
+                        model.timeInCurrentNode
+
+                    else
+                        0
             in
             { newModel
                 | currentNode = destinationThunk ()
-                , timeInCurrentNode = 0
+                , timeInCurrentNode = newCurrentTimeInNode
             }
 
         Nothing ->
@@ -412,35 +459,33 @@ timeoutTransition model =
 view : Model -> Html Msg
 view model =
     div []
-        [ simpleView "Elapsed Sim Time" model.elapsedSimTime
-        , simpleView "Time in Current Node" model.timeInCurrentNode
-        , simpleView "Current Node" model.currentNode.name
-        , hr [] []
+        [ table [ class "pure-table" ] <|
+            [ thead []
+                [ tr []
+                    [ th [] [ text "Parameter" ]
+                    , th [] [ text "Value" ]
+                    ]
+                ]
+            , tr []
+                [ td [] [ text "Elapsed Sim Time" ]
+                , td [] [ text (String.fromInt model.elapsedSimTime) ]
+                ]
+            , tr []
+                [ td [] [ text "Time in Current Node" ]
+                , td [] [ text (String.fromInt model.timeInCurrentNode) ]
+                ]
+            , tr []
+                [ td [] [ text "Current Node" ]
+                , td [] [ text model.currentNode.name ]
+                ]
+            ]
+        , br [] []
         , dataView model
         , hr [] []
         , div [] [ controlView model ]
-        , audioView model
+
+        --, audioView model
         ]
-
-
-audioView model =
-    div [ id "audio" ]
-        [ audio
-            [ id "pulse-beep"
-
-            -- src can be a local file too.
-            , src "beep2.mp3"
-
-            --, src "https://soundbible.com/mp3/Tyrannosaurus%20Rex%20Roar-SoundBible.com-807702404.mp3"
-            , controls False
-            ]
-            []
-        ]
-
-
-dataView : Model -> Html Msg
-dataView model =
-    text (toString (Dict.toList model.data))
 
 
 simpleView label value =
@@ -450,12 +495,62 @@ simpleView label value =
         ]
 
 
+audioView model =
+    div [ id "audio" ]
+        [ audio
+            [ id "pulse-beep"
+
+            -- src can be a local file too.
+            , src "lower_beep2.mp3"
+
+            --, src "https://soundbible.com/mp3/Tyrannosaurus%20Rex%20Roar-SoundBible.com-807702404.mp3"
+            , controls False
+            ]
+            []
+        ]
+
+
+makeTableEntry key data =
+    let
+        row =
+            case Dict.get key data of
+                Just (F v) ->
+                    tr [] [ td [] [ text key ], td [] [ text (String.fromFloat v) ] ]
+
+                Just (S v) ->
+                    tr [] [ td [] [ text key ], td [] [ text v ] ]
+
+                Nothing ->
+                    tr [] []
+    in
+    row
+
+
+dataView : Model -> Html Msg
+dataView model =
+    let
+        data =
+            model.data
+
+        keys =
+            Dict.keys data
+    in
+    table [ class "pure-table" ] <|
+        [ thead []
+            [ tr []
+                [ th [] [ text "Parameter" ]
+                , th [] [ text "Value" ]
+                ]
+            ]
+        ]
+            ++ List.map (\key -> makeTableEntry key data) keys
+
+
 controlView model =
     div []
         [ button [ class "pure-button", onClick HistoryRequest ] [ text "Request History" ]
         , button [ class "pure-button", onClick ExaminationRequest ] [ text "Perform Examination" ]
         , button [ class "pure-button", onClick (O2Therapy 0.3) ] [ text "O2 Therapy" ]
-        , hr [] []
         , fluidsView model
         , hr [] []
         , runningStateView model
