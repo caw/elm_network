@@ -141,7 +141,7 @@ update msg model =
                 Just (F val) ->
                     let
                         newdb =
-                            updateData model key (F (val + (percentDelta * val)))
+                            updateData model key (F (val + ((percentDelta / 100.0) * val)))
                     in
                     ( { model | data = newdb }, Cmd.none )
 
@@ -240,6 +240,22 @@ getMatchingArcs arcs request =
     List.filter (\arc -> checkArcMatch arc request) arcs
 
 
+eventTransition : Model -> Arc -> Model
+eventTransition model arc =
+    -- model
+    let
+        (Arc name _ arcMessages destinationThunk) =
+            arc
+
+        ( newModel, newCommands ) =
+            sequence update arcMessages ( model, Cmd.none )
+    in
+    { newModel
+        | currentNode = destinationThunk ()
+        , timeInCurrentNode = 0
+    }
+
+
 handleTrigger model trigger =
     let
         arcs =
@@ -262,22 +278,6 @@ handleTrigger model trigger =
                     model
     in
     ( newModel, Cmd.none )
-
-
-eventTransition : Model -> Arc -> Model
-eventTransition model arc =
-    -- model
-    let
-        (Arc name _ arcMessages destinationThunk) =
-            arc
-
-        ( newModel, newCommands ) =
-            sequence update arcMessages ( model, Cmd.none )
-    in
-    { newModel
-        | currentNode = destinationThunk ()
-        , timeInCurrentNode = 0
-    }
 
 
 timedout : Model -> Bool
@@ -353,7 +353,7 @@ makeTableEntry key data =
         row =
             case Dict.get key data of
                 Just (F v) ->
-                    tr [] [ td [] [ text key ], td [] [ text (String.fromFloat v) ] ]
+                    tr [] [ td [] [ text key ], td [] [ text (String.fromInt (round v)) ] ]
 
                 Just (S v) ->
                     tr [] [ td [] [ text key ], td [] [ text v ] ]
