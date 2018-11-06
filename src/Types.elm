@@ -1,10 +1,12 @@
-module Types exposing (Arc(..), ArcMessages, ArcName, DbValue(..), FiO2, FluidRate, FluidType, Key, Msg(..), Node, NodeName, RunningState(..), TriggerMsg(..))
+module Types exposing (Arc(..), ArcMessages, ArcName, DbValue(..), FiO2, FluidRate, FluidType, Key, Model, Msg(..), Node, NodeName, RunningState(..), TriggerMsg(..))
 
+import Dict exposing (Dict)
 import Time exposing (Posix)
 
 
 type Msg
     = Tick Time.Posix
+    | Tock
     | OximetryBeep Time.Posix
     | UpdateStringValue Key String
     | UpdateNumValue Key Float
@@ -14,8 +16,8 @@ type Msg
     | ExaminationRequest
     | IVFluids FluidRate FluidType
     | O2Therapy FiO2
+    | Timeout
     | Trigger TriggerMsg
-    | ProcessMessages ArcMessages
     | Pause
     | Run
 
@@ -58,13 +60,16 @@ type alias NodeName =
     String
 
 
+type alias Trigger =
+    Msg
+
+
 type Arc
-    = Arc String (Maybe Msg) (List Msg) (() -> Node)
+    = Arc String Trigger (List Msg) (() -> Node)
 
 
 type alias Node =
     { name : NodeName
-    , timeoutArc : Maybe Arc
     , arcs : List Arc
     , timeout : Maybe Int
     }
@@ -74,3 +79,14 @@ type RunningState
     = NotStarted
     | Running
     | Paused
+
+
+type alias Model =
+    { runningState : RunningState
+    , elapsedSimTime : Int
+    , timeInCurrentNode : Int
+    , speedUp : Float
+    , currentNode : Node
+    , nodes : List Node
+    , data : Dict String DbValue
+    }

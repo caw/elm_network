@@ -1,4 +1,4 @@
-port module Main exposing (Model, checkArcMatch, getMatchingArcs, handleTrigger, init, initialModel, main, subscriptions, update, view)
+port module Main exposing (checkArcMatch, getMatchingArcs, handleTrigger, init, initialModel, main, subscriptions, update, view)
 
 import Browser
 import Debug exposing (log, toString)
@@ -44,64 +44,8 @@ initialData =
         , ( "temp", F 37.0 )
         , ( "hr", F 100.0 )
         , ( "saO2", F 85 )
-        , ( "ecg", S "SR 100" )
+        , ( "ecg", S "SR" )
         ]
-
-
-n0 =
-    Node "START" (Just (Arc "n0_timeout" Nothing [] (\() -> n1))) [] (Just 0)
-
-
-n1 =
-    Node "N1"
-        (Just (Arc "n1_timeout" Nothing [ UpdateNumValue "saO2" 75, UpdateStringValue "ecg" "AF at 150", UpdateNumValue "hr" 150 ] (\() -> n2)))
-        [ Arc "n1_hist" (Just HistoryRequest) [ UpdateNumValue "saO2" 80, UpdateStringValue "ecg" "AF at 150", UpdateNumValue "hr" 150 ] (\() -> n2)
-        , Arc "n1_exam" (Just ExaminationRequest) [ UpdateNumValue "saO2" 80, UpdateStringValue "ecg" "AF at 150", UpdateNumValue "hr" 150 ] (\() -> n2)
-        , Arc "n1_o2" (Just (O2Therapy 0.3)) [ UpdateNumValue "saO2" 89, UpdateStringValue "ecg" "SR 120" ] (\() -> n3)
-        ]
-        (Just 60)
-
-
-
-{- n2 =
-       Node "N2"
-           (Just (Arc "n2_timeout" Nothing [ UpdateNumValue "saO2" 75, UpdateNumValue "bp" 70, UpdateStringValue "ecg" "slowing AF @ 80", UpdateNumValue "hr" 80 ] (\() -> n4)))
-           [ Arc "n1_o2" (Just (O2Therapy 0.3)) [ UpdateNumValue "saO2" 89, UpdateStringValue "ecg" "SR 120", UpdateNumValue "hr" 120 ] (\() -> n3) ]
-           (Just 55)
-
-
-   n3 =
-       Node
-           "N3"
-           (Just (Arc "n3_timeout" Nothing [ UpdateNumValue "saO2" 85, UpdateStringValue "ecg" "AF at 120", UpdateNumValue "hr" 120 ] (\() -> n2)))
-           [ Arc "n3_fluids" (Just (IVFluids 100 "saline")) [ UpdateNumValue "bp" 95, UpdateStringValue "ecg" "SR at 90", UpdateNumValue "hr" 90 ] (\() -> n5) ]
-           (Just 90)
-
-
-   n4 =
-       Node "N4"
-           Nothing
-           []
-           Nothing
-
-
-   n5 =
-       Node "N5"
-           Nothing
-           []
-           Nothing
--}
-
-
-type alias Model =
-    { runningState : RunningState
-    , elapsedSimTime : Int
-    , timeInCurrentNode : Int
-    , speedUp : Float
-    , currentNode : Node
-    , nodes : List Node
-    , data : Dict String DbValue
-    }
 
 
 initialModel : Model
@@ -128,20 +72,23 @@ updateData model key value =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        OximetryBeep _ ->
-            if model.runningState == Running then
-                ( model, sounds (E.string "beep") )
-
-            else
-                ( model, Cmd.none )
-
         Tick _ ->
             if model.runningState == Running then
-                model
-                    |> updateSimTime
-                    |> updateNodeTime
-                    |> maybeTimeoutNode
-                    |> (\newModel -> ( newModel, Cmd.none ))
+                if timedout model then
+                    handleTrigger
+                        { model
+                            | elapsedSimTime = model.elapsedSimTime + 1
+                            , timeInCurrentNode = 0
+                        }
+                        Timeout
+
+                else
+                    handleTrigger
+                        { model
+                            | elapsedSimTime = model.elapsedSimTime + 1
+                            , timeInCurrentNode = model.timeInCurrentNode + 1
+                        }
+                        Tock
 
             else
                 ( model, Cmd.none )
@@ -151,10 +98,6 @@ update msg model =
 
         Run ->
             ( { model | runningState = Running }, Cmd.none )
-
-        ProcessMessages arcMessages ->
-            ( model, Cmd.none )
-                |> sequence update arcMessages
 
         UpdateNumValue key value ->
             let
@@ -207,6 +150,13 @@ update msg model =
 
                 Nothing ->
                     ( model, Cmd.none )
+
+        OximetryBeep _ ->
+            if model.runningState == Running then
+                ( model, sounds (E.string "beep") )
+
+            else
+                ( model, Cmd.none )
 
         HistoryRequest ->
             let
@@ -278,22 +228,22 @@ updateNodeTime model =
     { model | timeInCurrentNode = model.timeInCurrentNode + 1 }
 
 
-checkArcMatch arc request =
+checkArcMatch arc trigger =
     let
-        (Arc _ r _ _) =
+        (Arc _ t _ _) =
             arc
     in
-    r == Just request
+    t == trigger
 
 
 getMatchingArcs arcs request =
     List.filter (\arc -> checkArcMatch arc request) arcs
 
 
-handleTrigger model request =
+handleTrigger model trigger =
     let
         arcs =
-            getMatchingArcs model.currentNode.arcs request
+            getMatchingArcs model.currentNode.arcs trigger
 
         newModel =
             case arcs of
@@ -322,7 +272,7 @@ eventTransition model arc =
             arc
 
         ( newModel, newCommands ) =
-            update (ProcessMessages arcMessages) model
+            sequence update arcMessages ( model, Cmd.none )
     in
     { newModel
         | currentNode = destinationThunk ()
@@ -330,57 +280,14 @@ eventTransition model arc =
     }
 
 
-maybeTimeoutNode : Model -> Model
-maybeTimeoutNode model =
-    let
-        cn =
-            model.currentNode
-
-        newModel =
-            case cn.timeout of
-                Just t ->
-                    if model.timeInCurrentNode >= t then
-                        timeoutTransition model
-
-                    else
-                        model
-
-                Nothing ->
-                    model
-    in
-    newModel
-
-
-
--- maybe we let this take an arc as a parameter, so we can use for timeout and non-timeout arcs?
-
-
-timeoutTransition : Model -> Model
-timeoutTransition model =
-    let
-        arc =
-            model.currentNode.timeoutArc
-    in
-    case arc of
-        Just (Arc name triggerMessages arcMessages destinationThunk) ->
-            let
-                ( newModel, newCmds ) =
-                    update (ProcessMessages arcMessages) model
-
-                newCurrentTimeInNode =
-                    if destinationThunk () == model.currentNode then
-                        model.timeInCurrentNode
-
-                    else
-                        0
-            in
-            { newModel
-                | currentNode = destinationThunk ()
-                , timeInCurrentNode = newCurrentTimeInNode
-            }
+timedout : Model -> Bool
+timedout model =
+    case model.currentNode.timeout of
+        Just t ->
+            model.timeInCurrentNode >= t
 
         Nothing ->
-            model
+            False
 
 
 
