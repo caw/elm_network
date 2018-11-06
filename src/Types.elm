@@ -1,4 +1,4 @@
-module Types exposing (Arc(..), ArcMessages, ArcName, DbValue(..), FiO2, FluidRate, FluidType, Key, Model, Msg(..), Node, NodeName, RunningState(..), TriggerMsg(..))
+module Types exposing (Arc(..), ArcMessages, ArcName, Comparison(..), DbValue(..), FiO2, FluidRate, FluidType, Key, Model, Msg(..), Node, NodeName, RunningState(..), TriggerMsg(..))
 
 import Dict exposing (Dict)
 import Time exposing (Posix)
@@ -12,6 +12,7 @@ type Msg
     | UpdateNumValue Key Float
     | DeltaNumValueByAmount Key Float
     | DeltaNumValueByPercent Key Float
+    | SimpleDBNumQuery Key Comparison Float
     | HistoryRequest
     | ExaminationRequest
     | IVFluids FluidRate FluidType
@@ -20,6 +21,11 @@ type Msg
     | Trigger TriggerMsg
     | Pause
     | Run
+
+
+type Comparison
+    = LessThan
+    | GreaterThan
 
 
 type TriggerMsg

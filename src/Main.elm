@@ -1,4 +1,4 @@
-port module Main exposing (checkArcMatch, getMatchingArcs, handleTrigger, init, initialModel, main, subscriptions, update, view)
+port module Main exposing (handleTrigger, init, initialModel, main, subscriptions, update, view)
 
 import Browser
 import Debug exposing (log, toString)
@@ -75,6 +75,7 @@ update msg model =
         Tick _ ->
             if model.runningState == Running then
                 if timedout model then
+                    -- is the currentNode timed out?
                     handleTrigger
                         { model
                             | elapsedSimTime = model.elapsedSimTime + 1
@@ -83,12 +84,35 @@ update msg model =
                         Timeout
 
                 else
-                    handleTrigger
-                        { model
-                            | elapsedSimTime = model.elapsedSimTime + 1
-                            , timeInCurrentNode = model.timeInCurrentNode + 1
-                        }
-                        Tock
+                    -- else if
+                    --     if the currentNode has a db query and it's true (first come, first served)
+                    --         then handle the db query as a trigger
+                    --     else
+                    --          handle a loop back to the same node
+                    let
+                        arcs =
+                            -- get a list of DB queries which are true
+                            checkDBQueryArcs model
+                    in
+                    case List.head arcs of
+                        Just arc ->
+                            let
+                                newModel =
+                                    eventTransition model arc
+                            in
+                            ( { newModel
+                                | elapsedSimTime = model.elapsedSimTime + 1
+                              }
+                            , Cmd.none
+                            )
+
+                        Nothing ->
+                            handleTrigger
+                                { model
+                                    | elapsedSimTime = model.elapsedSimTime + 1
+                                    , timeInCurrentNode = model.timeInCurrentNode + 1
+                                }
+                                Tock
 
             else
                 ( model, Cmd.none )
@@ -228,7 +252,41 @@ updateNodeTime model =
     { model | timeInCurrentNode = model.timeInCurrentNode + 1 }
 
 
-checkArcMatch arc trigger =
+checkDBQueryArcMatch model arc =
+    let
+        (Arc _ s _ _) =
+            arc
+    in
+    case s of
+        SimpleDBNumQuery key comp value ->
+            let
+                d =
+                    Dict.get key model.data
+            in
+            case d of
+                Just (F v) ->
+                    case comp of
+                        LessThan ->
+                            v < value
+
+                        GreaterThan ->
+                            v > value
+
+                Just (S v) ->
+                    False
+
+                Nothing ->
+                    False
+
+        _ ->
+            False
+
+
+checkDBQueryArcs model =
+    List.filter (\arc -> checkDBQueryArcMatch model arc) model.currentNode.arcs
+
+
+checkTriggerArcMatch arc trigger =
     let
         (Arc _ t _ _) =
             arc
@@ -236,8 +294,8 @@ checkArcMatch arc trigger =
     t == trigger
 
 
-getMatchingArcs arcs request =
-    List.filter (\arc -> checkArcMatch arc request) arcs
+getMatchingTriggerArcs arcs request =
+    List.filter (\arc -> checkTriggerArcMatch arc request) arcs
 
 
 eventTransition : Model -> Arc -> Model
@@ -250,16 +308,23 @@ eventTransition model arc =
         ( newModel, newCommands ) =
             sequence update arcMessages ( model, Cmd.none )
     in
-    { newModel
-        | currentNode = destinationThunk ()
-        , timeInCurrentNode = 0
-    }
+    if model.currentNode == destinationThunk () then
+        newModel
+
+    else
+        { newModel
+            | currentNode = destinationThunk ()
+            , timeInCurrentNode = 0
+        }
 
 
 handleTrigger model trigger =
     let
+        timeInNode =
+            model.timeInCurrentNode
+
         arcs =
-            getMatchingArcs model.currentNode.arcs trigger
+            getMatchingTriggerArcs model.currentNode.arcs trigger
 
         newModel =
             case arcs of
@@ -270,7 +335,7 @@ handleTrigger model trigger =
                     eventTransition model arc
 
                 arc :: rest ->
-                    -- AGAIN NEVER HAVE > 1 ARC AS A MATCH!!
+                    -- AGAIN NEVER HAVE > 1 ARC AS A MATCH ****** IT'S DETERMINISTIC *******!!
                     let
                         _ =
                             log "multiple matching arcs" (arc :: rest)

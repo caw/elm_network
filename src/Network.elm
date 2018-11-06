@@ -1,6 +1,6 @@
 module Network exposing (n0, n1, n2, n3, n4, n5)
 
-import Types exposing (Arc(..), Msg(..), Node)
+import Types exposing (..)
 
 
 n0 : Node
@@ -18,6 +18,7 @@ n1 =
         , Arc "n1_hist" HistoryRequest [ UpdateNumValue "saO2" 80, UpdateStringValue "ecg" "AF", UpdateNumValue "hr" 150 ] (\() -> n2)
         , Arc "n1_exam" ExaminationRequest [ UpdateNumValue "saO2" 80, UpdateStringValue "ecg" "AF", UpdateNumValue "hr" 150 ] (\() -> n2)
         , Arc "n1_o2" (O2Therapy 0.3) [ UpdateNumValue "saO2" 89, UpdateStringValue "ecg" "SR", UpdateNumValue "hr" 90 ] (\() -> n3)
+        , Arc "sat < 75" (SimpleDBNumQuery "saO2" LessThan 75) [] (\() -> n5)
         ]
         (Just 20)
 
