@@ -48,6 +48,15 @@ initialData =
         ]
 
 
+rangeData =
+    Dict.fromList
+        [ ( "bp", ( 60, 150 ) )
+        , ( "temp", ( 34, 42 ) )
+        , ( "hr", ( 30, 150 ) )
+        , ( "saO2", ( 60, 100 ) )
+        ]
+
+
 initialModel : Model
 initialModel =
     { runningState = NotStarted
