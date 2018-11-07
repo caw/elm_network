@@ -389,58 +389,44 @@ timedout model =
 view : Model -> Html Msg
 view model =
     div []
-        [ table [ class "pure-table" ]
-            [ thead []
-                [ tr []
-                    [ th [] [ text "Parameter" ]
-                    , th [] [ text "Value" ]
-                    ]
-                ]
-            , tr []
-                [ td [] [ text "Elapsed Sim Time" ]
-                , td [] [ text (String.fromInt model.elapsedSimTime) ]
-                ]
-            , tr []
-                [ td [] [ text "Time in Current Node" ]
-                , td [] [ text (String.fromInt model.timeInCurrentNode) ]
-                ]
-            , tr []
-                [ td [] [ text "Current Node" ]
-                , td [] [ text model.currentNode.name ]
-                ]
-            ]
+        [ modelParamView model
         , br [] []
-        , dataView model
+        , dbView model
+        , hr [] []
+        , logView model
         , hr [] []
         , div [] [ controlView model ]
-
-        -- , audioView model
         ]
 
 
-simpleView label value =
-    div []
-        [ text (label ++ ":   ")
-        , text (toString value)
-        ]
-
-
-audioView model =
-    div [ id "audio" ]
-        [ audio
-            [ id "pulse-beep"
-
-            -- src can be a local file too.
-            , src "beep.mp3"
-
-            --, src "https://soundbible.com/mp3/Tyrannosaurus%20Rex%20Roar-SoundBible.com-807702404.mp3"
-            , controls False
+modelParamView model =
+    table [ class "pure-table" ]
+        [ thead []
+            [ tr []
+                [ th [] [ text "Parameter" ]
+                , th [] [ text "Value" ]
+                ]
             ]
-            []
+        , tr []
+            [ td [] [ text "Elapsed Sim Time" ]
+            , td [] [ text (String.fromInt model.elapsedSimTime) ]
+            ]
+        , tr []
+            [ td [] [ text "Time in Current Node" ]
+            , td [] [ text (String.fromInt model.timeInCurrentNode) ]
+            ]
+        , tr []
+            [ td [] [ text "Current Node" ]
+            , td [] [ text model.currentNode.name ]
+            ]
         ]
 
 
-makeTableEntry key data =
+logView model =
+    textarea [ rows 11, readonly True ] [ text "Hello World" ]
+
+
+makeDBTableEntry key data =
     let
         row =
             case Dict.get key data of
@@ -456,8 +442,8 @@ makeTableEntry key data =
     row
 
 
-dataView : Model -> Html Msg
-dataView model =
+dbView : Model -> Html Msg
+dbView model =
     let
         data =
             model.data
@@ -473,7 +459,7 @@ dataView model =
                 ]
             ]
         ]
-            ++ List.map (\key -> makeTableEntry key data) keys
+            ++ List.map (\key -> makeDBTableEntry key data) keys
 
 
 controlView model =
