@@ -20,7 +20,7 @@ n1 =
         , Arc "n1_o2" (O2Therapy 0.3) [ UpdateNumValue "saO2" 89, UpdateStringValue "ecg" "SR", UpdateNumValue "hr" 90 ] (\() -> n3)
         , Arc "sat < 70" (SimpleDBNumQuery "saO2" LessThan 70) [] (\() -> n5)
         ]
-        (Just 20)
+        (Just 30)
 
 
 n2 : Node

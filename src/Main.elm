@@ -66,6 +66,7 @@ initialModel =
     , currentNode = n1
     , nodes = [ n1, n2 ]
     , data = initialData
+    , log = []
     }
 
 
@@ -210,56 +211,48 @@ update msg model =
                 ( model, Cmd.none )
 
         HistoryRequest ->
-            let
-                _ =
-                    log "History Request" ""
+            if model.runningState == Running then
+                let
+                    newModel =
+                        logger model "History"
+                in
+                handleTrigger newModel HistoryRequest
 
-                _ =
-                    log "Elapsed Time:  " model.elapsedSimTime
-
-                _ =
-                    log "Tim in Node:   " model.timeInCurrentNode
-            in
-            handleTrigger model HistoryRequest
+            else
+                ( model, Cmd.none )
 
         ExaminationRequest ->
-            let
-                _ =
-                    log "Examination Request" ""
+            if model.runningState == Running then
+                let
+                    newModel =
+                        logger model "Examination"
+                in
+                handleTrigger newModel ExaminationRequest
 
-                _ =
-                    log "Elapsed Time:  " model.elapsedSimTime
-
-                _ =
-                    log "Tim in Node:   " model.timeInCurrentNode
-            in
-            handleTrigger model ExaminationRequest
+            else
+                ( model, Cmd.none )
 
         IVFluids rate fluidType ->
-            let
-                _ =
-                    log "IV Fluids rate/type:  " (String.fromInt rate ++ "/" ++ fluidType)
+            if model.runningState == Running then
+                let
+                    newModel =
+                        logger model ("Fluid / " ++ fluidType ++ " / " ++ String.fromInt rate)
+                in
+                handleTrigger newModel (IVFluids rate fluidType)
 
-                _ =
-                    log "Elapsed Time:         " model.elapsedSimTime
-
-                _ =
-                    log "Tim in Node:          " model.timeInCurrentNode
-            in
-            handleTrigger model (IVFluids rate fluidType)
+            else
+                ( model, Cmd.none )
 
         O2Therapy fio2 ->
-            let
-                _ =
-                    log "O2 Therapy:   " fio2
+            if model.runningState == Running then
+                let
+                    newModel =
+                        logger model ("O2 Rx / " ++ String.fromFloat fio2)
+                in
+                handleTrigger newModel (O2Therapy fio2)
 
-                _ =
-                    log "Elapsed Time: " model.elapsedSimTime
-
-                _ =
-                    log "Tim in Node:  " model.timeInCurrentNode
-            in
-            handleTrigger model (O2Therapy fio2)
+            else
+                ( model, Cmd.none )
 
         _ ->
             let
@@ -382,6 +375,15 @@ timedout model =
             False
 
 
+logger : Model -> String -> Model
+logger model txt =
+    let
+        logText =
+            model.currentNode.name ++ " / " ++ String.fromInt model.timeInCurrentNode ++ " / " ++ String.fromInt model.elapsedSimTime ++ " / " ++ txt ++ "\n"
+    in
+    { model | log = model.log ++ [ logText ] }
+
+
 
 -- VIEW
 
@@ -423,7 +425,7 @@ modelParamView model =
 
 
 logView model =
-    textarea [ rows 11, readonly True ] [ text "Hello World" ]
+    textarea [ id "log", rows 11, readonly True ] (List.map text model.log)
 
 
 makeDBTableEntry key data =
@@ -518,5 +520,5 @@ subscriptions model =
         [ Time.every (1000 / model.speedUp) Tick
 
         -- This is how we do the pulse oximetry beeping at the HR
-        --, Time.every (1000 * hrPeriod) OximetryBeep
+        , Time.every (1000 * hrPeriod) OximetryBeep
         ]

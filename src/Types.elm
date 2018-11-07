@@ -96,4 +96,5 @@ type alias Model =
     , currentNode : Node
     , nodes : List Node
     , data : Dict String DbValue
+    , log : List String
     }
