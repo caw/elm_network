@@ -82,49 +82,67 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Tick _ ->
-            if model.runningState == Running then
-                if timedout model then
+            let
+                ( newModel, newCommands ) =
+                    update CheckDBTrigger model
+            in
+            if newModel.runningState == Running then
+                if timedout newModel then
                     -- is the currentNode timed out?
                     handleTrigger
-                        { model
-                            | elapsedSimTime = model.elapsedSimTime + 1
+                        { newModel
+                            | elapsedSimTime = newModel.elapsedSimTime + 1
                             , timeInCurrentNode = 0
                         }
                         Timeout
 
                 else
-                    -- else if
-                    --     if the currentNode has a db query and it's true (first come, first served)
-                    --         then handle the db query as a trigger
-                    --     else
-                    --          handle a loop back to the same node
-                    let
-                        arcs =
-                            -- get a list of DB queries which are true
-                            checkDBQueryArcs model
-                    in
-                    case List.head arcs of
-                        Just arc ->
-                            let
-                                newModel =
-                                    eventTransition model arc
-                            in
-                            ( { newModel
-                                | elapsedSimTime = model.elapsedSimTime + 1
-                              }
-                            , Cmd.none
-                            )
+                    {- -- this is a "checkDBQueryArc" really...
+                       let
+                           arcs =
+                               -- get a list of DB queries which are true
+                               checkDBQueryArcs model
+                       in
+                       case List.head arcs of
+                           Just arc ->
+                               let
+                                   newModel =
+                                       eventTransition model arc
+                               in
+                               ( { newModel
+                                   | elapsedSimTime = model.elapsedSimTime + 1
+                                   }
+                               , Cmd.none
+                               )
 
-                        Nothing ->
-                            handleTrigger
-                                { model
-                                    | elapsedSimTime = model.elapsedSimTime + 1
-                                    , timeInCurrentNode = model.timeInCurrentNode + 1
-                                }
-                                Tock
+                           Nothing ->
+                    -}
+                    handleTrigger
+                        { newModel
+                            | elapsedSimTime = newModel.elapsedSimTime + 1
+                            , timeInCurrentNode = newModel.timeInCurrentNode + 1
+                        }
+                        Tock
 
             else
                 ( model, Cmd.none )
+
+        CheckDBTrigger ->
+            let
+                arcs =
+                    -- get a list of DB queries which are true
+                    checkDBQueryArcs model
+            in
+            case List.head arcs of
+                Just arc ->
+                    let
+                        newModel =
+                            transition model arc
+                    in
+                    ( newModel, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
 
         Pause ->
             ( { model | runningState = Paused }, Cmd.none )
@@ -263,10 +281,10 @@ updateNodeTime model =
 
 checkDBQueryArcMatch model arc =
     let
-        (Arc _ s _ _) =
+        (Arc _ trigger _ _) =
             arc
     in
-    case s of
+    case trigger of
         SimpleDBNumQuery key comp value ->
             let
                 d =
@@ -307,8 +325,8 @@ getMatchingTriggerArcs arcs request =
     List.filter (\arc -> checkTriggerArcMatch arc request) arcs
 
 
-eventTransition : Model -> Arc -> Model
-eventTransition model arc =
+transition : Model -> Arc -> Model
+transition model arc =
     -- model
     let
         (Arc name _ arcMessages destinationThunk) =
@@ -317,7 +335,7 @@ eventTransition model arc =
         ( newModel, newCommands ) =
             sequence update arcMessages ( model, Cmd.none )
     in
-    if model.currentNode == destinationThunk () then
+    if newModel.currentNode == destinationThunk () then
         newModel
 
     else
@@ -341,7 +359,7 @@ handleTrigger model trigger =
                     model
 
                 [ arc ] ->
-                    eventTransition model arc
+                    transition model arc
 
                 arc :: rest ->
                     -- AGAIN NEVER HAVE > 1 ARC AS A MATCH ****** IT'S DETERMINISTIC *******!!
@@ -514,5 +532,5 @@ subscriptions model =
         [ Time.every (1000 / model.speedUp) Tick
 
         -- This is how we do the pulse oximetry beeping at the HR
-        , Time.every (1000 * hrPeriod) OximetryBeep
+        --, Time.every (1000 * hrPeriod) OximetryBeep
         ]

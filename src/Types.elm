@@ -12,6 +12,7 @@ type Msg
     | UpdateNumValue Key Float
     | DeltaNumValueByAmount Key Float
     | DeltaNumValueByPercent Key Float
+    | CheckDBTrigger
     | SimpleDBNumQuery Key Comparison Float
     | HistoryRequest
     | ExaminationRequest
