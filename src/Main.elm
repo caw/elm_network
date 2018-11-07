@@ -79,7 +79,25 @@ init _ =
 
 
 updateData model key value =
-    Dict.update key (\_ -> Just value) model.data
+    case value of
+        F v ->
+            let
+                limits =
+                    Dict.get key rangeData
+            in
+            case limits of
+                Just ( low, high ) ->
+                    let
+                        newValue =
+                            clamp low high v
+                    in
+                    Dict.update key (\_ -> Just (F newValue)) model.data
+
+                Nothing ->
+                    model.data
+
+        S v ->
+            model.data
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )

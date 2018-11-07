@@ -14,7 +14,7 @@ n1 : Node
 n1 =
     Node "N1"
         [ Arc "n1_timeout" Timeout [ UpdateNumValue "saO2" 75, UpdateStringValue "ecg" "AF", UpdateNumValue "hr" 150 ] (\() -> n2)
-        , Arc "ni_tock" Tock [ DeltaNumValueByAmount "bp" -2, DeltaNumValueByPercent "saO2" -0.5 ] (\() -> n1)
+        , Arc "ni_tock" Tock [ DeltaNumValueByAmount "bp" -2, DeltaNumValueByPercent "saO2" -1 ] (\() -> n1)
         , Arc "n1_hist" HistoryRequest [ UpdateNumValue "saO2" 80, UpdateStringValue "ecg" "AF", UpdateNumValue "hr" 150 ] (\() -> n2)
         , Arc "n1_exam" ExaminationRequest [ UpdateNumValue "saO2" 80, UpdateStringValue "ecg" "AF", UpdateNumValue "hr" 150 ] (\() -> n2)
         , Arc "n1_o2" (O2Therapy 0.3) [ UpdateNumValue "saO2" 89, UpdateStringValue "ecg" "SR", UpdateNumValue "hr" 90 ] (\() -> n3)
