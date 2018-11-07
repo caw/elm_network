@@ -94,7 +94,6 @@ type alias Model =
     , timeInCurrentNode : Int
     , speedUp : Float
     , currentNode : Node
-    , nodes : List Node
     , data : Dict String DbValue
     , log : List String
     }

@@ -64,7 +64,6 @@ initialModel =
     , timeInCurrentNode = 0
     , speedUp = 1
     , currentNode = n1
-    , nodes = [ n1, n2 ]
     , data = initialData
     , log = []
     }
@@ -73,6 +72,10 @@ initialModel =
 init : () -> ( Model, Cmd Msg )
 init _ =
     ( initialModel, Cmd.none )
+
+
+
+-- ******************************** needs clamp here *********************************
 
 
 updateData model key value =
@@ -98,26 +101,6 @@ update msg model =
                         Timeout
 
                 else
-                    {- -- this is a "checkDBQueryArc" really...
-                       let
-                           arcs =
-                               -- get a list of DB queries which are true
-                               checkDBQueryArcs model
-                       in
-                       case List.head arcs of
-                           Just arc ->
-                               let
-                                   newModel =
-                                       eventTransition model arc
-                               in
-                               ( { newModel
-                                   | elapsedSimTime = model.elapsedSimTime + 1
-                                   }
-                               , Cmd.none
-                               )
-
-                           Nothing ->
-                    -}
                     handleTrigger
                         { newModel
                             | elapsedSimTime = newModel.elapsedSimTime + 1
