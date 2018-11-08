@@ -37,7 +37,7 @@ n3 =
     Node
         "N3"
         [ Arc "n3_timeout" Timeout [ UpdateNumValue "saO2" 85, UpdateStringValue "ecg" "AF", UpdateNumValue "hr" 120 ] (\() -> n2)
-        , Arc "n3_fluids" (IVFluids 100 "saline") [ UpdateNumValue "bp" 95, UpdateStringValue "ecg" "AF", UpdateNumValue "hr" 80 ] (\() -> n5)
+        , Arc "n3_fluids" (IVFluids 100 "saline") [ UpdateNumValue "bp" 95, UpdateStringValue "ecg" "SR", UpdateNumValue "hr" 80 ] (\() -> n5)
         , Arc "n3_tock" Tock [ DeltaNumValueByPercent "saO2" 0.1 ] (\() -> n3)
         ]
         (Just 40)

@@ -163,9 +163,6 @@ update msg model =
             let
                 newdb =
                     updateData model key (S value)
-
-                _ =
-                    log "newdb" newdb
             in
             ( { model | data = newdb }, Cmd.none )
 
