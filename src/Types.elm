@@ -18,6 +18,7 @@ type Msg
     | ExaminationRequest
     | IVFluids FluidRate FluidType
     | O2Therapy FiO2
+    | OrderCXR
     | Timeout
     | Trigger TriggerMsg
     | Pause

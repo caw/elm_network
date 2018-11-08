@@ -97,7 +97,7 @@ updateData model key value =
                     model.data
 
         S v ->
-            model.data
+            Dict.update key (\_ -> Just value) model.data
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -163,6 +163,9 @@ update msg model =
             let
                 newdb =
                     updateData model key (S value)
+
+                _ =
+                    log "newdb" newdb
             in
             ( { model | data = newdb }, Cmd.none )
 
@@ -488,6 +491,10 @@ fluidsView model =
             ]
 
 
+investigationsView model =
+    div [] [ button [ class "pure-button", onClick OrderCXR ] [ text "Chest X-Ray" ] ]
+
+
 runningStateView model =
     if model.runningState == Running then
         div [] [ button [ class "pure-button", onClick Pause ] [ text "Pause" ] ]
@@ -521,5 +528,5 @@ subscriptions model =
         [ Time.every (1000 / model.speedUp) Tick
 
         -- This is how we do the pulse oximetry beeping at the HR
-        , Time.every (1000 * hrPeriod) OximetryBeep
+        -- , Time.every (1000 * hrPeriod) OximetryBeep
         ]

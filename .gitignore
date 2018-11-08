@@ -10,6 +10,9 @@ repl-temp-*
 sounds_data/
 sounds.aup
 
+#images
+images/
+
 main.js
 
 network1.jpg
